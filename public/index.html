@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-time Canvas</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            background-color: #00ff00;
+        }
+        .toolbar {
+            margin-bottom: 10px;
+        }
+        .toolbar button, .toolbar input, .toolbar select {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button id="brush">Brush</button>
+        <button id="eraser">Eraser</button>
+        <button id="addText">Add Text</button>
+        <label for="fontSize">Font Size:</label>
+        <input type="number" id="fontSize" value="16" min="10" max="72" step="1">
+        <label for="brushSize">Brush Size:</label>
+        <input type="range" id="brushSize" min="1" max="50" value="2">
+        <label for="eraserSize">Eraser Size:</label>
+        <input type="range" id="eraserSize" min="1" max="50" value="10">
+        <label for="brushColor">Brush Color:</label>
+        <select id="brushColor">
+            <option value="black">Black</option>
+            <option value="red">Red</option>
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="yellow">Yellow</option>
+        </select>
+    </div>
+    <canvas id="myCanvas" width="1920" height="1080"></canvas>
+    <script>
+        const canvas = document.getElementById('myCanvas');
+        const ctx = canvas.getContext('2d');
+        const ws = new WebSocket('ws://localhost:3000');
+        const fontSizeInput = document.getElementById('fontSize');
+        const brushSizeInput = document.getElementById('brushSize');
+        const eraserSizeInput = document.getElementById('eraserSize');
+        const brushColorSelect = document.getElementById('brushColor');
+
+        let currentTool = 'brush';
+        let drawing = false;
+        let prevX = 0;
+        let prevY = 0;
+        let textEntries = [];
+        let selectedTextEntry = null;
+
+        const setTool = (tool) => {
+            currentTool = tool;
+        };
+
+        document.getElementById('brush').addEventListener('click', () => setTool('brush'));
+        document.getElementById('eraser').addEventListener('click', () => setTool('eraser'));
+        document.getElementById('addText').addEventListener('click', () => setTool('text'));
+
+        ws.onopen = () => {
+            console.log('Connected to WebSocket server');
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('Message from server:', data);
+                if (data.type === 'draw' || data.type === 'erase') {
+                    ctx.strokeStyle = data.color;
+                    ctx.lineWidth = data.width;
+                    ctx.beginPath();
+                    ctx.moveTo(data.prevX, data.prevY);
+                    ctx.lineTo(data.currX, data.currY);
+                    ctx.stroke();
+                } else if (data.type === 'text') {
+                    addTextEntry(data);
+                } else if (data.type === 'updateText') {
+                    updateTextEntry(data);
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+                console.error('Message data:', event.data);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket connection closed');
+        };
+
+        const startDrawing = (e) => {
+            if (currentTool === 'brush' || currentTool === 'eraser') {
+                drawing = true;
+                [prevX, prevY] = getCoords(e);
+            }
+        };
+
+        const stopDrawing = () => {
+            drawing = false;
+        };
+
+        const draw = (e) => {
+            if (!drawing) return;
+            const [currX, currY] = getCoords(e);
+            const drawData = {
+                type: currentTool === 'eraser' ? 'erase' : 'draw',
+                prevX,
+                prevY,
+                currX,
+                currY,
+                color: currentTool === 'eraser' ? '#00ff00' : brushColorSelect.value,
+                width: currentTool === 'eraser' ? eraserSizeInput.value : brushSizeInput.value
+            };
+            ws.send(JSON.stringify(drawData));
+            prevX = currX;
+            prevY = currY;
+        };
+
+        const getCoords = (e) => {
+            if (e.touches && e.touches.length > 0) {
+                return [e.touches[0].clientX - canvas.offsetLeft, e.touches[0].clientY - canvas.offsetTop];
+            }
+            return [e.offsetX, e.offsetY];
+        };
+
+        const addTextEntry = (data) => {
+            ctx.font = data.font;
+            ctx.fillStyle = data.color;
+            ctx.fillText(data.text, data.x, data.y);
+            textEntries.push(data);
+        };
+
+        const updateTextEntry = (data) => {
+            const entry = textEntries.find(entry => entry.id === data.id);
+            if (entry) {
+                ctx.clearRect(entry.x - 5, entry.y - parseInt(entry.font, 10) - 5, ctx.measureText(entry.text).width + 10, parseInt(entry.font, 10) + 10);
+                Object.assign(entry, data);
+                addTextEntry(entry);
+            }
+        };
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchend', stopDrawing);
+        canvas.addEventListener('touchmove', draw);
+
+        canvas.addEventListener('click', (e) => {
+            const [x, y] = getCoords(e);
+            if (currentTool === 'text') {
+                const text = prompt('Enter text:');
+                if (text) {
+                    const fontSize = fontSizeInput.value;
+                    const textData = {
+                        type: 'text',
+                        id: Date.now(),
+                        text,
+                        x,
+                        y,
+                        color: 'black',
+                        font: `${fontSize}px Arial`
+                    };
+                    ws.send(JSON.stringify(textData));
+                }
+            } else {
+                const entry = textEntries.find(entry => {
+                    const textWidth = ctx.measureText(entry.text).width;
+                    const textHeight = parseInt(entry.font, 10);
+                    return x >= entry.x && x <= entry.x + textWidth && y <= entry.y && y >= entry.y - textHeight;
+                });
+                if (entry) {
+                    const newText = prompt('Edit text:', entry.text);
+                    if (newText !== null) {
+                        const updatedTextData = {
+                            ...entry,
+                            text: newText,
+                            type: 'updateText'
+                        };
+                        ws.send(JSON.stringify(updatedTextData));
+                    }
+                }
+            }
+        });
+
+        // Prevent scrolling on touch devices
+        canvas.addEventListener('touchstart', (e) => e.preventDefault());
+        canvas.addEventListener('touchmove', (e) => e.preventDefault());
+    </script>
+</body>
+</html>
