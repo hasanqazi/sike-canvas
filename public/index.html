@@ -41,7 +41,7 @@
     <script>
         const canvas = document.getElementById('myCanvas');
         const ctx = canvas.getContext('2d');
-        const ws = new WebSocket('ws://${window.location.hostname}:3000');
+        const ws = new WebSocket(`ws://${window.location.hostname}:3000`);
         const fontSizeInput = document.getElementById('fontSize');
         const brushSizeInput = document.getElementById('brushSize');
         const eraserSizeInput = document.getElementById('eraserSize');
