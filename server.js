@@ -1,23 +1,10 @@
 const express = require('express');
-const fs = require('fs');
-const https = require('https');
+const http = require('http');
 const WebSocket = require('ws');
 
 const app = express();
-
-// Load SSL certificate and key
-const privateKey = fs.readFileSync('private.key', 'utf8');
-const certificate = fs.readFileSync('certificate.crt', 'utf8');
-//const ca = fs.readFileSync('ca_bundle.crt', 'utf8');
-
-const credentials = {
-    key: privateKey,
-    cert: certificate,
-    //ca: ca
-};
-
-const httpsServer = https.createServer(credentials, app);
-const wss = new WebSocket.Server({ server: httpsServer });
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
 
 app.use(express.static('public'));
 
@@ -42,6 +29,6 @@ wss.on('connection', (ws) => {
     });
 });
 
-httpsServer.listen(3000, () => {
+server.listen(3000, () => {
     console.log('Server is listening on port 3000');
 });
