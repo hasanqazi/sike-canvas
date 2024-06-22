@@ -6,14 +6,14 @@ const WebSocket = require('ws');
 const app = express();
 
 // Load SSL certificate and key
-const privateKey = fs.readFileSync('/path/to/your/private.key', 'utf8');
-const certificate = fs.readFileSync('/path/to/your/certificate.crt', 'utf8');
-const ca = fs.readFileSync('/path/to/your/ca_bundle.crt', 'utf8');
+const privateKey = fs.readFileSync('private.key', 'utf8');
+const certificate = fs.readFileSync('certificate.crt', 'utf8');
+//const ca = fs.readFileSync('ca_bundle.crt', 'utf8');
 
 const credentials = {
     key: privateKey,
     cert: certificate,
-    ca: ca
+    //ca: ca
 };
 
 const httpsServer = https.createServer(credentials, app);
